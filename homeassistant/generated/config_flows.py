@@ -368,6 +368,7 @@ FLOWS = {
         "tautulli",
         "tellduslive",
         "tesla_wall_connector",
+        "themeparks",
         "tibber",
         "tile",
         "tolo",
