@@ -5,20 +5,12 @@
         "title": "Theme Parks",
         "description": "Select a Theme Park to add to tracker",
         "data": {
-          "parkslug": "Theme Park"
+          "parkname": "Theme Park"
         },
         "data_description": {
-          "parkslug": "The Theme Park to track"
+          "parkname": "The Theme Park to track"
         }
       }
-    },
-    "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
-    },
-    "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
     }
   }
 }

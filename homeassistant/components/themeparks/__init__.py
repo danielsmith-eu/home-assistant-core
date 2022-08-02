@@ -9,7 +9,24 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.httpx_client import get_async_client
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    ENTITY_BASE_URL,
+    ENTITY_TYPE,
+    ID,
+    LIVE,
+    LIVE_DATA,
+    METHOD_GET,
+    NAME,
+    PARKNAME,
+    PARKSLUG,
+    QUEUE,
+    STANDBY,
+    TIME,
+    TYPE_ATTRACTION,
+    TYPE_SHOW,
+    WAIT_TIME,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,8 +74,8 @@ class ThemeParkAPI:
         """Initialize the gateway."""
         self._hass = hass
         self._config_entry = config_entry
-        self._parkslug = config_entry.data["parkslug"]
-        self._parkname = config_entry.data["parkname"]
+        self._parkslug = config_entry.data[PARKSLUG]
+        self._parkname = config_entry.data[PARKNAME]
 
     async def async_initialize(self) -> None:
         """Initialize controller and connect radio."""
@@ -67,73 +84,44 @@ class ThemeParkAPI:
 
     async def do_live_lookup(self):
         """Do API lookup of the 'live' page of this park."""
-        _LOGGER.info("Running do_live_lookup in ThemeParkAPI")
+        _LOGGER.debug("Running do_live_lookup in ThemeParkAPI")
 
-        items = await self.do_api_lookup("live", "liveData")
+        items = await self.do_api_lookup()
 
         def parse_live(item):
-            """Parse live data from API.
+            """Parse live data from API."""
 
-            LiveData is like:
-            {
-                "id": "f0d4b531-e291-471b-9527-00410c2bbd65",
-                "name": "Crush's Coaster",
-                "entityType": "ATTRACTION",
-                "parkId": "ca888437-ebb4-4d50-aed2-d227f7096968",
-                "externalId": "P2XA03",
-                "queue": {
-                    "STANDBY": {
-                        "waitTime": 85
-                    },
-                    "SINGLE_RIDER": {
-                        "waitTime": 75
-                    },
-                    "PAID_RETURN_TIME": {
-                        "price": {
-                        "amount": 1800,
-                        "currency": "EUR"
-                        },
-                        "state": "FINISHED",
-                        "returnEnd": null,
-                        "returnStart": null
-                    }
-                },
-                "status": "OPERATING",
-                "lastUpdated": "2022-07-27T17:39:49Z"
-            },
-            """
+            _LOGGER.debug("Parsed API item for: %s", item[NAME])
 
-            _LOGGER.info("Parsed API item for: %s", item["name"])
-
-            name = item["name"] + " (" + self._parkname + ")"
+            name = item[NAME] + " (" + self._parkname + ")"
 
             if "queue" not in item:
-                _LOGGER.info("No queue in item")
-                return (item["id"], {"api_id": item["id"], "name": name, "time": None})
+                _LOGGER.debug("No queue in item")
+                return (item[ID], {ID: item[ID], NAME: name, TIME: None})
 
-            if "STANDBY" not in item["queue"]:
-                _LOGGER.info("No STANDBY in item['queue']")
-                return (item["id"], {"api_id": item["id"], "name": name, "time": None})
+            if "STANDBY" not in item[QUEUE]:
+                _LOGGER.debug("No STANDBY in item['queue']")
+                return (item[ID], {ID: item[ID], NAME: name, TIME: None})
 
-            _LOGGER.info("Time found")
+            _LOGGER.debug("Time found")
             return (
-                item["id"],
+                item[ID],
                 {
-                    "api_id": item["id"],
-                    "name": name,
-                    "time": item["queue"]["STANDBY"]["waitTime"],
+                    ID: item[ID],
+                    NAME: name,
+                    TIME: item[QUEUE][STANDBY][WAIT_TIME],
                 },
             )
 
         return dict(map(parse_live, items))
 
-    async def do_api_lookup(self, subpage, subfield):
+    async def do_api_lookup(self):
         """Lookup the subpage and subfield in the API."""
-        url = "https://api.themeparks.wiki/v1/entity/" + self._parkslug + "/" + subpage
+        url = f"{ENTITY_BASE_URL}/{self._parkslug}/{LIVE}"
 
         client = get_async_client(self._hass)
         response = await client.request(
-            "GET",
+            METHOD_GET,
             url,
             timeout=30,
             follow_redirects=True,
@@ -142,6 +130,8 @@ class ThemeParkAPI:
         items_data = response.json()
 
         def filter_item(item):
-            return item["entityType"] == "SHOW" or item["entityType"] == "ATTRACTION"
+            return (
+                item[ENTITY_TYPE] == TYPE_SHOW or item[ENTITY_TYPE] == TYPE_ATTRACTION
+            )
 
-        return filter(filter_item, items_data[subfield])
+        return filter(filter_item, items_data[LIVE_DATA])

@@ -1,17 +1,9 @@
 {
     "config": {
-        "abort": {
-            "already_configured": "Device is already configured"
-        },
-        "error": {
-            "cannot_connect": "Failed to connect",
-            "invalid_auth": "Invalid authentication",
-            "unknown": "Unexpected error"
-        },
         "step": {
             "user": {
                 "data": {
-                    "parkslug": "Theme Park"
+                    "parkname": "Theme Park"
                 }
             }
         }

@@ -1,4 +1,4 @@
-"""Platform for sensor integration."""
+"""Platform for Theme Park sensor integration."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -18,7 +18,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .const import DOMAIN
+from .const import DOMAIN, NAME, TIME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ async def async_setup_entry(
     """Set up the sensor platform."""
 
     my_api = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator = MyCoordinator(hass, my_api)
+    coordinator = ThemeParksCoordinator(hass, my_api)
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -45,32 +45,25 @@ async def async_setup_entry(
 
 
 class AttractionSensor(SensorEntity, CoordinatorEntity):
-    """An entity using CoordinatorEntity.
-
-    The CoordinatorEntity class provides:
-      should_poll
-      async_update
-      async_added_to_hass
-      available
-    """
+    """An entity using CoordinatorEntity."""
 
     def __init__(self, coordinator, idx):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
         self.idx = idx
-        self._attr_name = coordinator.data[idx]["name"]
+        self._attr_name = coordinator.data[idx][NAME]
         self._attr_native_unit_of_measurement = TIME_MINUTES
         self._attr_device_class = SensorDeviceClass.DURATION
         self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_value = self.coordinator.data[self.idx]["time"]
+        self._attr_native_value = self.coordinator.data[self.idx][TIME]
 
-        _LOGGER.info("Adding AttractionSensor called %s", self._attr_name)
+        _LOGGER.debug("Adding AttractionSensor called %s", self._attr_name)
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        newtime = self.coordinator.data[self.idx]["time"]
-        _LOGGER.info(
+        newtime = self.coordinator.data[self.idx][TIME]
+        _LOGGER.debug(
             "Setting updated time from coordinator for %s to %s",
             str(self._attr_name),
             str(newtime),
@@ -79,26 +72,20 @@ class AttractionSensor(SensorEntity, CoordinatorEntity):
         self.async_write_ha_state()
 
 
-class MyCoordinator(DataUpdateCoordinator):
-    """My custom coordinator."""
+class ThemeParksCoordinator(DataUpdateCoordinator):
+    """Theme parks coordinator."""
 
-    def __init__(self, hass, my_api):
-        """Initialize my coordinator."""
+    def __init__(self, hass, api):
+        """Initialize theme parks coordinator."""
         super().__init__(
             hass,
             _LOGGER,
-            # Name of the data. For logging purposes.
             name="Theme Park Wait Time Sensor",
-            # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(minutes=5),
         )
-        self.my_api = my_api
+        self.api = api
 
     async def _async_update_data(self):
-        """Fetch data from API endpoint.
-
-        This is the place to pre-process the data to lookup tables
-        so entities can quickly look up their data.
-        """
-        _LOGGER.info("Calling do_live_lookup in MyCoordinator")
-        return await self.my_api.do_live_lookup()
+        """Fetch data from API endpoint."""
+        _LOGGER.debug("Calling do_live_lookup in ThemeParksCoordinator")
+        return await self.api.do_live_lookup()
