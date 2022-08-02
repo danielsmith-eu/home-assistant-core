@@ -1,7 +1,6 @@
 """Config flow for Theme Park Wait Times integration."""
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import voluptuous as vol
@@ -13,8 +12,6 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {vol.Required("parkslug"): str, vol.Required("parkname"): str}

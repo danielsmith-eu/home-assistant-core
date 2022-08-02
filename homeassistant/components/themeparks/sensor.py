@@ -1,6 +1,9 @@
 """Platform for sensor integration."""
 from __future__ import annotations
 
+from datetime import timedelta
+import logging
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -8,11 +11,16 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import TIME_MINUTES
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
-# from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -22,59 +30,75 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
 
-    children_url = (
-        "https://api.themeparks.wiki/v1/entity/"
-        + config_entry.data["parkslug"]
-        + "/children"
+    my_api = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator = MyCoordinator(hass, my_api)
+
+    await coordinator.async_config_entry_first_refresh()
+
+    _LOGGER.info("Config entry first refresh completed, adding entities")
+    entities = [AttractionSensor(coordinator, idx) for idx in coordinator.data.keys()]
+
+    _LOGGER.info(
+        "Entities to add (count: %s): %s", str(entities.__len__), str(entities)
     )
+    async_add_entities(entities)
 
-    client = get_async_client(hass)
-    response = await client.request(
-        "GET",
-        children_url,
-        timeout=10,
-        follow_redirects=True,
-    )
 
-    children_data = response.json()
+class AttractionSensor(SensorEntity, CoordinatorEntity):
+    """An entity using CoordinatorEntity.
 
-    def filter_child(item):
-        return item["entityType"] == "SHOW" or item["entityType"] == "ATTRACTION"
+    The CoordinatorEntity class provides:
+      should_poll
+      async_update
+      async_added_to_hass
+      available
+    """
 
-    def parse_child(item):
-        """Parse children from API into AttractionSensors.
+    def __init__(self, coordinator, idx):
+        """Pass coordinator to CoordinatorEntity."""
+        super().__init__(coordinator)
+        self.idx = idx
+        self._attr_name = coordinator.data[idx]["name"]
+        self._attr_native_unit_of_measurement = TIME_MINUTES
+        self._attr_device_class = SensorDeviceClass.DURATION
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_value = self.coordinator.data[self.idx]["time"]
 
-            Children are like:
-            {
-            "id": "2d2b5083-3cb4-453f-b067-4fec48322195",
-            "name": "Disney Illuminations",
-            "entityType": "SHOW",
-            "slug": null,
-            "externalId": "P1GS24"
-        }
+        _LOGGER.info("Adding AttractionSensor called %s", self._attr_name)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        newtime = self.coordinator.data[self.idx]["time"]
+        _LOGGER.info(
+            "Setting updated time from coordinator for %s to %s",
+            str(self._attr_name),
+            str(newtime),
+        )
+        self._attr_native_value = newtime
+        self.async_write_ha_state()
+
+
+class MyCoordinator(DataUpdateCoordinator):
+    """My custom coordinator."""
+
+    def __init__(self, hass, my_api):
+        """Initialize my coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            # Name of the data. For logging purposes.
+            name="Theme Park Wait Time Sensor",
+            # Polling interval. Will only be polled if there are subscribers.
+            update_interval=timedelta(minutes=5),
+        )
+        self.my_api = my_api
+
+    async def _async_update_data(self):
+        """Fetch data from API endpoint.
+
+        This is the place to pre-process the data to lookup tables
+        so entities can quickly look up their data.
         """
-        return AttractionSensor(item["name"], item["id"])
-
-    async_add_entities(
-        map(parse_child, filter(filter_child, children_data["children"]))
-    )
-
-
-class AttractionSensor(SensorEntity):
-    """Representation of a Sensor."""
-
-    _attr_name = "UNKNOWN"
-    _attr_native_unit_of_measurement = TIME_MINUTES
-    _attr_device_class = SensorDeviceClass.DURATION
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
-    def __init__(self, name, api_id):
-        """Create new sensor for the attraction wait time."""
-        self._api_id = api_id
-        self._attr_name = name
-
-    # def update(self) -> None:
-    #     """Fetch new state data for the sensor.
-    #     This is the only method that should fetch new data for Home Assistant.
-    #     """
-    #     self._attr_native_value = 23
+        _LOGGER.info("Calling do_live_lookup in MyCoordinator")
+        return await self.my_api.do_live_lookup()
